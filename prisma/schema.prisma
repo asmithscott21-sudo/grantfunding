@@ -1,0 +1,235 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ USERS & ROLES ============
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("writer") // writer, manager, finance, admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications      Application[]
+  applicationVersions ApplicationVersion[]
+}
+
+// ============ GRANT RESEARCHING MODULE ============
+model GrantOpportunity {
+  id           String   @id @default(cuid())
+  title        String
+  organization String
+  description  String?
+  sector       String
+  amountMin    Float?
+  amountMax    Float?
+  currency     String   @default("USD")
+  deadline     DateTime
+  timezone     String   @default("UTC")
+  geography    String?
+  eligibility  String?
+  link         String?
+  status       String   @default("active") // active, expired, withdrawn
+  saved        Boolean  @default(false)
+  bookmarked   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  applications Application[]
+}
+
+// ============ GRANT WRITING & APPLICATION MODULE ============
+model Application {
+  id               String   @id @default(cuid())
+  opportunityId   String
+  opportunity     GrantOpportunity @relation(fields: [opportunityId], references: [id])
+  title            String
+  status           String   @default("idea") // idea, draft, internal_review, submitted, awarded, rejected
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id])
+  templateType     String?  // loi, full_proposal, concept_paper, other
+  wordLimit        Int?
+  charLimit        Int?
+  submissionDate   DateTime?
+  submissionMethod String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  versions   ApplicationVersion[]
+  budgets    Budget[]
+  milestones Milestone[]
+  clauses    ApplicationClause[]
+  alerts     GrantAlert[]
+}
+
+model ApplicationVersion {
+  id             String   @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  authorId      String
+  author        User     @relation(fields: [authorId], references: [id])
+  content       String
+  wordCount     Int      @default(0)
+  charCount     Int      @default(0)
+  notes          String?
+  isCurrent      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model ApplicationTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  type         String   // loi, full_proposal, concept_paper, other
+  description  String?
+  content      String
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ============ COMMON CLAUSES MODULE ============
+model ClauseLibrary {
+  id          String   @id @default(cuid())
+  title       String
+  category    String   // indemnification, ip_rights, audit, reporting, cost_recovery, other
+  text        String
+  riskRating  String   @default("medium") // low, medium, high, critical
+  isStandard  Boolean  @default(true)
+  explanation String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applications ApplicationClause[]
+}
+
+model ApplicationClause {
+  id          String   @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  clauseId     String
+  clause       ClauseLibrary @relation(fields: [clauseId], references: [id])
+  isAccepted   Boolean  @default(false)
+  isModified   Boolean  @default(false)
+  modifiedText String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model StandardResponse {
+  id          String   @id @default(cuid())
+  title       String
+  category    String
+  text        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============ FINANCIALS MODULE ============
+model Budget {
+  id             String   @id @default(cuid())
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  totalAmount    Float
+  currency       String   @default("USD")
+  matchRequired  Boolean  @default(false)
+  matchAmount    Float    @default(0)
+  inKindContribution Float @default(0)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lineItems BudgetLineItem[]
+}
+
+model BudgetLineItem {
+  id         String   @id @default(cuid())
+  budgetId   String
+  budget     Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category   String   // personnel, fringe, travel, supplies, equipment, indirect_cost, other
+  description String
+  quantity   Float
+  unit       String   // each, hour, month, year, etc.
+  unitCost   Float
+  totalCost  Float
+  period     String?  // year1, year2, year3, etc.
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model FTESalary {
+  id             String   @id @default(cuid())
+  position       String
+  hourlyRate     Float
+  annualSalary   Float
+  fringeRate     Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ============ GRANT TRACKING MODULE ============
+model Milestone {
+  id             String   @id @default(cuid())
+  applicationId  String
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  dueDate        DateTime
+  completedDate  DateTime?
+  status         String   @default("pending") // pending, completed, overdue
+  assignedTo     String?
+  priority       String   @default("medium") // low, medium, high
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  alerts         GrantAlert[]
+}
+
+model GrantAlert {
+  id           String   @id @default(cuid())
+  applicationId String?
+  application  Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  milestoneId  String?
+  milestone    Milestone?   @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  type         String   // deadline, milestone, submission, reporting
+  title        String
+  message      String
+  alertDate    DateTime
+  sentEmail    Boolean  @default(false)
+  sentSMS      Boolean  @default(false)
+  isRead       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+// Legacy models for compatibility
+model UserLegacy {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  published Boolean  @default(false)
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
